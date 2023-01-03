@@ -1,8 +1,10 @@
 import secrets
+from datetime import timedelta
 
 from django.shortcuts import render, redirect
+from django.utils import timezone
 
-from .models import Url, Clicks
+from .models import Url
 
 
 def index(request):
@@ -20,9 +22,23 @@ def url_result(request):
 
 
 def redirect_view(request, short_url):
+    expired_message = ""
     url = Url.objects.get(short_url=short_url)
     original_url = url.full_url
+    expiration_date = url.date_created + timedelta(days=7)
+    if timezone.now() > expiration_date:
+        url.is_active = False
+        url.save()
+        expired_message = "Your short URL is expired"
+    if url.clicks > 3:
+        url.is_active = False
+        url.save()
+        expired_message = "You've reached the maximum number of clicks for this short URL"
+    url.clicks += 1
+    url.save()
     if "http" not in original_url:
         original_url = f"https://{original_url}"
-    url.clicks_set.create()
-    return redirect(original_url)
+    if url.is_active:
+        return redirect(original_url)
+    else:
+        return render(request, "url_expired.html", {"base": "base.html", "message": expired_message})
